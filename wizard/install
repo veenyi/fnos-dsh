@@ -1,0 +1,30 @@
+[
+    {
+        "stepTitle": "安装说明",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "<b>DeepSeek Harness</b><br>DeepSeek AI 官方开源 Agent Harness（dsh）飞牛版：插件化智能体工作台，自带完整 Web 聊天界面。"
+            },
+            {
+                "type": "tips",
+                "helpText": "<br><b>使用流程：</b><br>1. 安装完成后，在应用详情页点击「打开」进入工作台（http://NAS_IP:3080）<br>2. 进入「设置 → 模型」填入 DeepSeek 官方 API Key（或使用预置的聚合网关，免费模型直接可用）<br>3. 在聊天页选择模型，即可开始 Agent 对话（支持工具调用、技能、多会话）"
+            }
+        ]
+    },
+    {
+        "stepTitle": "模型 API Key（可选）",
+        "items": [
+            {
+                "type": "text",
+                "field": "wizard_deepseek_key",
+                "label": "DeepSeek 官方 API Key（可选，留空可稍后在 Web 界面填写）",
+                "placeholder": "sk-..."
+            },
+            {
+                "type": "tips",
+                "helpText": "已预置聚合网关提供方（token.sensenova.cn，免费）：sensenova-6.7-flash-lite / deepseek-v4-flash / glm-5.2 等模型，可免 Key 直接体验；填写的官方 Key 将加密保存在 NAS 本地（.credentials.yaml，只写不读）。"
+            }
+        ]
+    }
+]

@@ -1,0 +1,24 @@
+# fnos-dsh .gitignore
+# 产物（FPK 由 Actions 构建，本地 pkg 不入库）
+pkg/
+*.fpk
+
+# 依赖（Actions 里 npm install 重建）
+app/node_modules/
+node_modules/
+
+# 构建时下载的 node 运行时（Actions 里下载，不入库）
+app/bin/
+
+# 敏感/本地文件（严禁入库）
+*.env
+.env
+*.local
+*.key
+*credential*
+askpass*
+nas_*
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db

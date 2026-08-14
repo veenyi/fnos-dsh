@@ -1,0 +1,21 @@
+# fnos-dsh 启动补丁（overlay）
+# 作用：dsh 出于安全默认只监听 127.0.0.1，且 CLI 层拒绝 --host 0.0.0.0；
+#       通过 loader patch（用户层最高优先级）将 webserver 绑定到全部接口，
+#       使 NAS 局域网可直接访问工作台。
+# 说明：不再硬编码 trustedHosts（内网 IP）。绑定 0.0.0.0 时 dsh 会自动把
+#       本机 LAN IP 纳入浏览器信任围栏（resolveLanTrust → lanAddresses），
+#       配合对 client-connection 的特权方法定制，局域网即可访问配置页面。
+- id: webserver
+  config:
+    host: 0.0.0.0
+    port: 3080
+
+# fnos-dsh 定制：钉钉 Stream 渠道插件（单聊 MVP）
+# 凭据通过环境变量注入（cmd/main 启动时从 data/.env 读取并 export），不硬编码。
+- insert:
+    - id: channel-dingtalk
+      name: '@deepseek-ai/dsh-channel-dingtalk'
+      config:
+        enabled: !!js (process.env.DINGTALK_APP_KEY ?? '') !== ''
+        appKey: !!js process.env.DINGTALK_APP_KEY ?? ''
+        appSecret: !!js process.env.DINGTALK_APP_SECRET ?? ''

@@ -1,0 +1,73 @@
+name: build-fpk
+
+# 触发：推送 v* tag（如 v0.1.17）或手动触发
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DSH_VERSION: 0.1.0-rc.6
+      NODE_VERSION: 22.23.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装依赖（dsh + dingtalk-stream）
+        working-directory: app
+        run: npm install --no-audit --no-fund
+
+      - name: 应用 fnos-dsh 定制补丁
+        working-directory: app
+        run: bash apply-patches.sh
+
+      - name: 下载捆绑 Node 运行时
+        run: |
+          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+          mkdir -p /tmp/node-runtime
+          tar -xJf /tmp/node.tar.xz -C /tmp/node-runtime --strip-components=1
+          echo "node: $(/tmp/node-runtime/bin/node --version)"
+
+      - name: 组装 app/（bin + node_modules + patch + ui）
+        run: |
+          mkdir -p app/build/bin
+          cp /tmp/node-runtime/bin/node app/build/bin/node
+          cp -r app/node_modules app/build/node_modules
+          cp app/patch-web.yaml app/build/
+          cp -r app/ui app/build/ui
+          cp app/package.json app/build/
+          cp app/package-lock.json app/build/ 2>/dev/null || true
+          # 隐私兜底：构建产物扫描（命中敏感信息即失败）
+          if grep -rlE 'Ferr0li|192\.168\.|C:\\Users|sk-[a-zA-Z0-9]{16,}' app/build/ 2>/dev/null | head -5; then
+            echo "FATAL: 构建产物含敏感信息"; exit 1
+          fi
+
+      - name: 构建 FPK（Linux tar 手工打包，与 fnpack 同构）
+        run: |
+          # app.tgz = app/ 内容（平铺）
+          (cd app/build && tar czf ../../app.tgz .)
+          # FPK = app.tgz + cmd/config/ICON/manifest/wizard 的 gzip tar
+          tar cf - app.tgz cmd config ICON.PNG ICON_256.PNG manifest wizard | gzip > fnos-dsh.fpk
+          ls -la fnos-dsh.fpk
+          # 版本号校验
+          grep '^version' manifest
+
+      - name: 发布 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: fnos-dsh.fpk
+          body: |
+            fnos-dsh 自动打包（dsh ${{ env.DSH_VERSION }}）
+            - 触发版本：${{ github.ref_name }}
+            - 构建方式：GitHub Actions Linux 手工构建 FPK

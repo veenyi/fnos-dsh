@@ -1,0 +1,41 @@
+#!/bin/bash
+
+### DeepSeek Harness 安装前回调 — 清理残留进程与端口
+
+TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/fnos-dsh}"
+TRIM_PKGVAR="${TRIM_PKGVAR:-/var/apps/fnos-dsh/var}"
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+
+log_msg() {
+    local msg="$(date '+%Y-%m-%d %H:%M:%S') - [install_init] $1"
+    echo "$msg" >> "${LOG_FILE}" 2>/dev/null || true
+}
+
+log_msg "=== install_init start ==="
+
+# 清理残留 dsh 进程（精确匹配 lib/bin.js，避免误杀）
+pkill -9 -f "node_modules/@deepseek-ai/dsh/lib/bin.js" 2>/dev/null || true
+pkill -9 -f "fnos-dsh/watchdog.sh" 2>/dev/null || true
+_wait=0
+while [ ${_wait} -lt 10 ]; do
+    if ! pgrep -f "node_modules/@deepseek-ai/dsh/lib/bin.js" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+    _wait=$((_wait + 1))
+done
+log_msg "进程清理完成 (等待 ${_wait}s)"
+
+for PORT in 3080; do
+    PID=$(ss -tlnp 2>/dev/null | grep ":${PORT} " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+    if [ -n "$PID" ]; then
+        CMDLINE=$(ps -p "$PID" -o cmd= 2>/dev/null | grep -iE 'dsh|node' || true)
+        if [ -n "$CMDLINE" ]; then
+            kill -9 "$PID" 2>/dev/null || true
+            log_msg "端口 ${PORT} 被占用，已清理进程 $PID"
+        fi
+    fi
+done
+
+log_msg "=== install_init done ==="
+exit 0

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+### DeepSeek Harness 卸载后回调 — 按向导选择清理数据
+### wizard_delete_data=true 时清空 var/home（含会话、配置、API Key）
+
+set -e
+
+TRIM_PKGVAR="${TRIM_PKGVAR:-/var/apps/fnos-dsh/var}"
+TRIM_PKGHOME="${TRIM_PKGHOME:-/var/apps/fnos-dsh/home}"
+
+log_msg() {
+    local msg="$(date '+%Y-%m-%d %H:%M:%S') - [uninstall] $1"
+    echo "$msg"
+    echo "$msg" >> "${TRIM_PKGVAR}/info.log" 2>/dev/null || true
+}
+
+log_msg "=== uninstall_callback start (delete_data=${wizard_delete_data:-false}) ==="
+
+if [ "${wizard_delete_data:-false}" = "true" ]; then
+    log_msg "deleting user data (var/home)"
+    rm -rf "${TRIM_PKGVAR:?}" 2>/dev/null || true
+    rm -rf "${TRIM_PKGHOME:?}" 2>/dev/null || true
+else
+    log_msg "keeping user data"
+fi
+
+log_msg "uninstall_callback finished."
+exit 0

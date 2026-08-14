@@ -1,0 +1,114 @@
+#!/bin/bash
+
+### DeepSeek Harness 安装后回调 — 目录准备、DSH_HOME 初始化、API Key 落盘、权限修复
+
+set -e
+
+TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/fnos-dsh}"
+TRIM_PKGHOME="${TRIM_PKGHOME:-/var/apps/fnos-dsh/home}"
+TRIM_PKGVAR="${TRIM_PKGVAR:-/var/apps/fnos-dsh/var}"
+DATA_DIR="${TRIM_PKGVAR}/data"
+PORT="${DSH_PORT:-3080}"
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+
+log_msg() {
+    local msg="$(date '+%Y-%m-%d %H:%M:%S') - [install] $1"
+    echo "$msg"
+    echo "$msg" >> "${LOG_FILE}" 2>/dev/null || true
+}
+
+toast_err() {
+    echo "$*" > "$TRIM_TEMP_LOGFILE"
+}
+
+trap 'toast_err "脚本出错(L${LINENO}): $(tail -3 "${LOG_FILE}" 2>/dev/null)"' ERR
+
+log_msg "=== install_callback start ==="
+
+# 1) 二进制与脚本权限（Windows 打包脚本 cp 后可能丢执行位，全部 chmod）
+chmod 755 "${TRIM_APPDEST}/bin/node" 2>/dev/null || true
+chmod 755 "${TRIM_APPDEST}/cmd/"* 2>/dev/null || true
+chmod 755 "${TRIM_APPDEST}/cmd/main" 2>/dev/null || true
+log_msg "binary chmod done"
+
+# 2) 数据目录
+mkdir -p "${TRIM_PKGVAR}/logs" "${TRIM_PKGHOME}" "${DATA_DIR}"
+log_msg "data dirs created"
+
+# 2b) node_modules 软链：dsh 的 loader 从 profile 目录(data/profiles/web)解析插件依赖，
+#     须把 data/node_modules 软链到 target 的 node_modules，否则 IM 渠道插件等自定义包无法加载。
+if [ ! -e "${DATA_DIR}/node_modules" ]; then
+    ln -s "${TRIM_APPDEST}/node_modules" "${DATA_DIR}/node_modules" 2>/dev/null || true
+    log_msg "node_modules symlink created"
+fi
+
+# 3) 版本记录
+echo "$(cat "${TRIM_APPDEST}/manifest" 2>/dev/null | grep '^version' | awk '{print $3}')" > "${TRIM_PKGVAR}/app_version" 2>/dev/null || true
+
+# 4) DSH_HOME 初始化：预置 settings.yaml（聚合网关提供方）
+SETTINGS="${DATA_DIR}/settings.yaml"
+if [ ! -f "${SETTINGS}" ]; then
+    mkdir -p "${DATA_DIR}"
+    cat > "${SETTINGS}" <<'YAML'
+# DeepSeek Harness 预置配置（fnos-dsh）
+# 已预置聚合网关提供方（token.sensenova.cn，免费），填 Key 即用；
+# DeepSeek 官方与 Anthropic/OpenAI 等目录提供方可在 Web UI「设置→模型」一键添加。
+# 注意：局域网监听绑定（0.0.0.0）由内置 patch-web.yaml 实现，此处配置无效。
+llm-pi-ai:
+  providers:
+    sensenova:
+      displayName: 聚合网关 (sensenova)
+      apiKeyEnv: SENSENOVA_API_KEY
+      api: openai-completions
+      baseURL: https://token.sensenova.cn/v1
+      models:
+        - id: sensenova-6.7-flash-lite
+        - id: deepseek-v4-flash
+        - id: glm-5.2
+YAML
+    chmod 600 "${SETTINGS}" 2>/dev/null || true
+    log_msg "settings.yaml preseeded (sensenova provider)"
+else
+    log_msg "settings.yaml exists, keeping existing"
+fi
+
+# 5) DeepSeek 官方 Key（安装向导填写则写入 .credentials.yaml，YAML 格式）
+if [ -n "${wizard_deepseek_key:-}" ]; then
+    CRED="${DATA_DIR}/.credentials.yaml"
+    if grep -q '^DEEPSEEK_API_KEY:' "${CRED}" 2>/dev/null; then
+        log_msg "DEEPSEEK_API_KEY already present, keeping existing"
+    else
+        {
+            echo "# DeepSeek Harness 凭据（fnos-dsh 安装向导写入）"
+            echo "DEEPSEEK_API_KEY: ${wizard_deepseek_key}"
+        } >> "${CRED}" 2>/dev/null || true
+        chmod 600 "${CRED}" 2>/dev/null || true
+        log_msg "DeepSeek API Key written to .credentials.yaml (wizard)"
+    fi
+fi
+
+# 6) 安装完成弹窗
+cat > "${TRIM_TEMP_LOGFILE}" <<EOF
+DeepSeek Harness 安装完成！
+
+【工作台地址】http://<NAS-IP>:${PORT}
+
+使用步骤：
+1. 打开上方地址进入工作台
+2. 「设置 → 模型」填入 DeepSeek 官方 API Key，
+   或直接选用预置的聚合网关（免费模型，开箱即用）
+3. 开始 Agent 对话（支持工具调用 / 技能 / 多会话）
+
+数据与配置保存在 NAS 本地。
+EOF
+log_msg "credentials toast written"
+
+# 7) 权限修复
+if [ -n "${TRIM_USERNAME}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_USERNAME}" "${TRIM_PKGVAR}" 2>>"${LOG_FILE}" || true
+    chown -R "${TRIM_USERNAME}:${TRIM_USERNAME}" "${TRIM_PKGHOME}" 2>>"${LOG_FILE}" || true
+fi
+
+trap - ERR
+log_msg "install_callback finished successfully."
+exit 0

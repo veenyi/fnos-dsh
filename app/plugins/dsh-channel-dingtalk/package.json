@@ -1,0 +1,10 @@
+{
+  "name": "@deepseek-ai/dsh-channel-dingtalk",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "dependencies": {}
+}

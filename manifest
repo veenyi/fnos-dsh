@@ -1,0 +1,15 @@
+appname               = fnos-dsh
+version               = 0.1.17
+display_name          = "DeepSeek Harness"
+icon                  = ICON.PNG
+desc                  = "DeepSeek Harness (dsh) — DeepSeek AI 官方开源 Agent Harness，插件化智能体工作台。内置完整 Web UI：聊天工作台（Agent 会话）、模型管理（DeepSeek 官方 / OpenAI 兼容网关 / Anthropic 等一键添加）、插件系统（Agent/工具/技能/工作流全插件化）、多会话管理与历史回放。<br/><br/><strong>核心能力：</strong><br/>• 开箱即用：预置 DeepSeek 官方 + 聚合网关（sensenova）双提供方，填入 API Key 即可对话<br/>• Agent 工作台：多 Agent 并发会话、工具调用（文件/终端/Web/子任务）、技能库<br/>• 模型灵活：Web UI 直接添加任意 OpenAI 兼容端点，模型变更即时生效<br/>• 数据本地：会话日志与配置全部保存在 NAS 本地<br/><br/><strong>快捷入口：</strong><br/>• 安装后点击应用详情页的「打开」按钮进入工作台（端口 3080）<br/><br/><strong>免责声明：</strong><br/>本应用由第三方打包分发，基于 DeepSeek AI 开源项目 deepseek-harness（MIT License）构建，与 DeepSeek 官方无直接关联。项目处于快速迭代期，升级可能带来兼容性变更。"
+platform              = all
+source                = thirdparty
+maintainer            = "deepseek-ai"
+maintainer_url        = https://github.com/deepseek-ai/deepseek-harness
+distributor           = veenyi
+distributor_url       = https://github.com/veenyi/fnos-dsh
+micro_app             = true
+desktop_uidir         = ui
+desktop_applaunchname = fnos-dsh.Main
+checksum              =

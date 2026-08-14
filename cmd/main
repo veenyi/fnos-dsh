@@ -1,0 +1,184 @@
+#!/bin/bash
+#
+# DeepSeek Harness (fnos-dsh) — 生命周期管理
+# 用法: main start|stop|status
+#
+# 架构：watchdog 常驻守护 + node 主进程
+#   - start    → 启动 watchdog（后台），由 watchdog 拉起/守护 dsh web
+#   - stop     → 停止 watchdog + dsh 主进程
+#   - status   → 检查 dsh 主进程
+
+TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/fnos-dsh}"
+TRIM_PKGHOME="${TRIM_PKGHOME:-/var/apps/fnos-dsh/home}"
+TRIM_PKGVAR="${TRIM_PKGVAR:-/var/apps/fnos-dsh/var}"
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/dsh.pid"
+MON_PID_FILE="${TRIM_PKGVAR}/monitor.pid"
+DATA_DIR="${TRIM_PKGVAR}/data"
+PORT="${DSH_PORT:-3080}"
+BASE="http://127.0.0.1:${PORT}"
+
+NODE_BIN="${TRIM_APPDEST}/bin/node"
+# fnOS 解包 app/ 内容平铺到 target 根目录，node_modules 位于 target 根下
+DSH_ENTRY="${TRIM_APPDEST}/node_modules/@deepseek-ai/dsh/lib/bin.js"
+# dsh 默认只监听 127.0.0.1（安全限制），须用 loader patch 将 webserver 绑定 0.0.0.0
+PATCH_FILE="${TRIM_APPDEST}/patch-web.yaml"
+WATCHDOG="${TRIM_PKGVAR}/watchdog.sh"
+
+log_msg() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"; }
+
+fix_perms() {
+    if [ -d "${TRIM_APPDEST}" ]; then
+        APP_OWNER=$(stat -c '%U:%G' "${TRIM_APPDEST}" 2>/dev/null)
+        if [ -n "$APP_OWNER" ]; then
+            [ -d "${TRIM_PKGVAR}" ] && chown -R "$APP_OWNER" "${TRIM_PKGVAR}" 2>/dev/null || true
+            [ -d "${TRIM_PKGHOME}" ] && chown -R "$APP_OWNER" "${TRIM_PKGHOME}" 2>/dev/null || true
+        fi
+    fi
+}
+
+wait_http() {
+    local url="$1" tries="${2:-30}"
+    local i
+    for i in $(seq 1 "${tries}"); do
+        if curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 "${url}" 2>/dev/null | grep -qE '^(200|301|302|400|401|403|404)$'; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+spawn_dsh() {
+    # 真正的 dsh 启动（被 watchdog 与 start 共用）
+    local pid
+    mkdir -p "${DATA_DIR}" "${TRIM_PKGVAR}/logs" "${TRIM_PKGHOME}"
+    # 软链幂等：loader 从 profile 目录解析插件依赖需要 data/node_modules
+    if [ ! -e "${DATA_DIR}/node_modules" ]; then
+        ln -s "${TRIM_APPDEST}/node_modules" "${DATA_DIR}/node_modules" 2>/dev/null || true
+    fi
+    # 从 data/.env 读取 IM 渠道凭据并导出（供插件 !!js process.env.X 读取）
+    if [ -f "${TRIM_PKGVAR}/.env" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        . "${TRIM_PKGVAR}/.env"
+        set +a
+    fi
+    HOME="${TRIM_PKGHOME}" DSH_HOME="${DATA_DIR}" \
+        "${NODE_BIN}" "${DSH_ENTRY}" --profile web --patch "${PATCH_FILE}" \
+        >> "${TRIM_PKGVAR}/logs/dsh.log" 2>&1 &
+    pid=$!
+    printf "%s" "${pid}" > "${PID_FILE}"
+    log_msg "dsh spawned (pid=${pid}, port=${PORT}, DSH_HOME=${DATA_DIR})"
+}
+
+start_watchdog() {
+    if [ -r "${MON_PID_FILE}" ]; then
+        mpid=$(head -n 1 "${MON_PID_FILE}" | tr -d '[:space:]')
+        if [ -n "$mpid" ] && kill -0 "$mpid" 2>/dev/null; then
+            log_msg "watchdog already running (pid=${mpid})"
+            return 0
+        fi
+    fi
+    cat > "${WATCHDOG}" <<WDOG
+#!/bin/bash
+# fnos-dsh watchdog — 崩溃自动重启（stop 时由 STOP_FLAG 退出）
+TRIM_APPDEST="${TRIM_APPDEST}"
+TRIM_PKGVAR="${TRIM_PKGVAR}"
+PID_FILE="${PID_FILE}"
+LOG_FILE="${LOG_FILE}"
+STOP_FLAG="${TRIM_PKGVAR}/.stop_requested"
+DATA_DIR="${DATA_DIR}"
+while true; do
+    if [ -f "\${STOP_FLAG}" ]; then
+        rm -f "\${STOP_FLAG}"
+        exit 0
+    fi
+    pid=\$(cat "\${PID_FILE}" 2>/dev/null)
+    if [ -z "\$pid" ] || ! kill -0 "\$pid" 2>/dev/null; then
+        echo "\$(date '+%Y-%m-%d %H:%M:%S') - [watchdog] dsh down, respawning" >> "\${LOG_FILE}"
+        mkdir -p "\${DATA_DIR}" "\${TRIM_PKGVAR}/logs"
+        # 权限修复：数据目录属主对齐应用属主（防止 EACCES 崩溃循环）
+        APP_OWNER=\$(stat -c '%U:%G' "\${TRIM_APPDEST}" 2>/dev/null)
+        if [ -n "\$APP_OWNER" ]; then
+            chown -R "\$APP_OWNER" "\${TRIM_PKGVAR}" 2>/dev/null || true
+        fi
+        HOME="${TRIM_PKGHOME}" DSH_HOME="\${DATA_DIR}" \
+            "${NODE_BIN}" "${DSH_ENTRY}" --profile web --patch "${PATCH_FILE}" \
+            >> "\${TRIM_PKGVAR}/logs/dsh.log" 2>&1 &
+        echo \$! > "\${PID_FILE}"
+    fi
+    sleep 10
+done
+WDOG
+    chmod 700 "${WATCHDOG}"
+    nohup "${WATCHDOG}" >> "${LOG_FILE}" 2>&1 &
+    echo $! > "${MON_PID_FILE}"
+    log_msg "watchdog started (pid=$(cat "${MON_PID_FILE}"))"
+}
+
+start_process() {
+    if status; then log_msg "already running"; return 0; fi
+    if [ ! -x "${NODE_BIN}" ] || [ ! -f "${DSH_ENTRY}" ]; then
+        log_msg "FATAL: node/dsh entry missing: ${NODE_BIN} / ${DSH_ENTRY}"
+        return 1
+    fi
+    fix_perms
+    rm -f "${TRIM_PKGVAR}/.stop_requested"
+    spawn_dsh
+    start_watchdog
+    if wait_http "${BASE}" 60; then
+        log_msg "dsh web is up (${BASE})"
+        return 0
+    else
+        log_msg "WARNING: dsh web did not answer within 60s (check logs/dsh.log)"
+        return 0
+    fi
+}
+
+stop_process() {
+    log_msg "Stopping DeepSeek Harness ..."
+    touch "${TRIM_PKGVAR}/.stop_requested"
+    # 停止 watchdog
+    if [ -r "${MON_PID_FILE}" ]; then
+        mpid=$(head -n 1 "${MON_PID_FILE}" | tr -d '[:space:]')
+        if [ -n "$mpid" ] && kill -0 "$mpid" 2>/dev/null; then
+            kill -TERM "$mpid" 2>/dev/null
+            sleep 1
+            kill -0 "$mpid" 2>/dev/null && kill -KILL "$mpid" 2>/dev/null
+        fi
+    fi
+    rm -f "${MON_PID_FILE}"
+    # 停止 dsh
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null
+            local i
+            for i in $(seq 1 5); do
+                sleep 1
+                kill -0 "$pid" 2>/dev/null || break
+            done
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    fi
+    # 兜底清理（避免误杀同名进程，精确匹配 lib/bin.js）
+    pkill -TERM -f "${DSH_ENTRY}" 2>/dev/null || true
+    sleep 1
+    pkill -9 -f "${DSH_ENTRY}" 2>/dev/null || true
+    rm -f "${PID_FILE}"
+    log_msg "Stopped (incl. leftover cleanup)"
+    return 0
+}
+
+status() {
+    [ -f "${PID_FILE}" ] && pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]') && kill -0 "$pid" 2>/dev/null
+}
+
+case $1 in
+start)   start_process ;;
+stop)    stop_process ;;
+status)  status && exit 0 || exit 3 ;;
+*)       exit 1 ;;
+esac

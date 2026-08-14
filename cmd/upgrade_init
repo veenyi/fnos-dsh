@@ -1,0 +1,8 @@
+#!/bin/bash
+
+### DeepSeek Harness 升级前回调 — 停止旧进程
+
+"${TRIM_APPDEST}/cmd/main" stop 2>/dev/null || true
+pkill -f "node_modules/@deepseek-ai/dsh/lib/bin.js" 2>/dev/null || true
+sleep 1
+exit 0

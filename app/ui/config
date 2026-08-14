@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "fnos-dsh.Main": {
+            "title": "DeepSeek Harness 工作台",
+            "icon": "images/icon.png",
+            "type": "url",
+            "protocol": "http",
+            "port": "3080",
+            "url": "/",
+            "allUsers": false
+        }
+    }
+}
