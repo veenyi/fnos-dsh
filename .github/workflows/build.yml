@@ -49,10 +49,10 @@ jobs:
           cp app/package.json app/build/
           cp app/package-lock.json app/build/ 2>/dev/null || true
           # 隐私兜底 1：项目文件严格扫描（含 192.168 示例级 → 用户文件不允许出现）
-          HITS=$(grep -rlE 'Ferr0li|192\.168\.|C:\\\\Users|sk-[a-zA-Z0-9]{16,}' app/patches app/plugins app/patch-web.yaml cmd config wizard manifest 2>/dev/null | head -5)
+          HITS=$(grep -rlI 'Ferr0li|192\.168\.|C:\\\\Users|sk-[a-zA-Z0-9]{16,}' app/patches app/plugins app/patch-web.yaml cmd config wizard manifest 2>/dev/null | head -5)
           if [ -n "$HITS" ]; then echo "FATAL: 项目文件含敏感信息: $HITS"; exit 1; fi
-          # 隐私兜底 2：node_modules 依赖只查高置信敏感（密码/本地路径/长key，排除依赖库文档的示例 IP）
-          HITS2=$(grep -rlE 'Ferr0li|C:\\\\Users|sk-[a-zA-Z0-9]{20,}' app/build/node_modules 2>/dev/null | head -5)
+          # 隐私兜底 2：node_modules 依赖只查高置信敏感（密码/本地路径/长key，-I 忽略二进制避免 wasm 字节误报）
+          HITS2=$(grep -rlI 'Ferr0li|C:\\\\Users|sk-[a-zA-Z0-9]{20,}' app/build/node_modules 2>/dev/null | head -5)
           if [ -n "$HITS2" ]; then echo "FATAL: node_modules 含敏感信息: $HITS2"; exit 1; fi
 
       - name: 构建 FPK（Linux tar 手工打包，与 fnpack 同构）
