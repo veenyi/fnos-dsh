@@ -12,10 +12,10 @@ if [ -d "patches/files/node_modules" ]; then
   echo "[patches] node_modules overrides copied"
 fi
 
-# 2) 装入自定义插件（钉钉 IM 渠道）
-if [ -d "../plugins/dsh-channel-dingtalk" ]; then
+# 2) 装入自定义插件（钉钉 IM 渠道，位于 app/plugins/）
+if [ -d "plugins/dsh-channel-dingtalk" ]; then
   mkdir -p node_modules/@deepseek-ai
-  cp -r ../plugins/dsh-channel-dingtalk node_modules/@deepseek-ai/
+  cp -r plugins/dsh-channel-dingtalk node_modules/@deepseek-ai/
   echo "[patches] plugin dsh-channel-dingtalk installed"
 fi
 
