@@ -3,9 +3,9 @@
 pkg/
 *.fpk
 
-# 依赖（Actions 里 npm install 重建）
-app/node_modules/
-node_modules/
+# 依赖（Actions 里 npm install 重建；锚定路径避免误伤 patches 下的补丁文件）
+/app/node_modules/
+/node_modules/
 
 # 构建时下载的 node 运行时（Actions 里下载，不入库）
 app/bin/
