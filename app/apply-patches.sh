@@ -12,12 +12,14 @@ if [ -d "patches/files/node_modules" ]; then
   echo "[patches] node_modules overrides copied"
 fi
 
-# 2) 装入自定义插件（钉钉 IM 渠道，位于 app/plugins/）
-if [ -d "plugins/dsh-channel-dingtalk" ]; then
-  mkdir -p node_modules/@deepseek-ai
-  cp -r plugins/dsh-channel-dingtalk node_modules/@deepseek-ai/
-  echo "[patches] plugin dsh-channel-dingtalk installed"
-fi
+# 2) 装入自定义插件（IM 渠道 + 扫码配置，位于 app/plugins/）
+for PLUGIN in dsh-channel-dingtalk dsh-channel-discord dsh-channel-feishu dsh-channel-wecom dsh-channel-telegram dsh-channel-weixin dsh-channels-scan; do
+  if [ -d "plugins/$PLUGIN" ]; then
+    mkdir -p node_modules/@deepseek-ai
+    cp -r "plugins/$PLUGIN" node_modules/@deepseek-ai/
+    echo "[patches] plugin $PLUGIN installed"
+  fi
+done
 
 # 3) 生成 FPK 用的 app.tgz 内容就绪检查
 [ -f "node_modules/@deepseek-ai/dsh/lib/bin.js" ] && echo "[patches] dsh entry verified"

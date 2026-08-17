@@ -1,6 +1,10 @@
 {
   "dependencies": {
     "@deepseek-ai/dsh": "^0.1.0-rc.6",
-    "dingtalk-stream": "2.1.6-beta.1"
+    "dingtalk-stream": "2.1.6-beta.1",
+    "@tencent-connect/dsh-qqbot": "^0.4.0",
+    "@larksuiteoapi/node-sdk": "^1.28.0",
+    "@linxin666/dsh-web-ui-all": "^0.1.20",
+    "@linxin666/dsh-skins": "^0.1.20"
   }
 }

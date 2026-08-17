@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IM 渠道扫码配置 · fnos-dsh</title>
+<script src="qrcode.min.js"></script>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#f5f6f8; color:#1f2328; padding:20px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  h1 { font-size:17px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+  .sub { font-size:12px; color:#656d76; margin-bottom:16px; line-height:1.7; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .card .head { display:flex; align-items:center; gap:8px; }
+  .card .nm { font-size:14px; font-weight:600; flex:1; }
+  .st { font-size:11px; padding:2px 8px; border-radius:999px; }
+  .st.on { background:#e6f4ea; color:#2da44e; }
+  .st.off { background:#f0f1f3; color:#656d76; }
+  .card .desc { font-size:12px; color:#656d76; margin-top:2px; }
+  .note { font-size:11px; color:#bf8700; background:#fdf6e3; border:1px solid #f3e3b8; border-radius:6px; padding:6px 10px; margin-top:8px; line-height:1.6; }
+  .btn { border:1px solid #4D6BFE; color:#4D6BFE; background:transparent; border-radius:8px; padding:6px 14px; font-size:12px; cursor:pointer; margin-top:10px; }
+  .btn.primary { background:#4D6BFE; color:#fff; border:none; }
+  .btn:hover { opacity:.85; }
+  .modal-mask { position:fixed; inset:0; background:rgba(20,24,35,.45); display:none; align-items:center; justify-content:center; z-index:999; }
+  .modal-mask.show { display:flex; }
+  .modal { background:#fff; border-radius:14px; width:360px; max-width:92vw; padding:18px 20px; box-shadow:0 10px 40px rgba(0,0,0,.18); }
+  .modal h3 { font-size:15px; font-weight:600; margin-bottom:4px; }
+  .modal .hint { font-size:12px; color:#656d76; line-height:1.6; margin-bottom:12px; }
+  .qr-zone { display:flex; justify-content:center; padding:8px 0 4px; }
+  .qr-zone canvas, .qr-zone img { width:220px; height:220px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+  .qr-status { text-align:center; font-size:12px; color:#656d76; min-height:18px; margin:6px 0 10px; }
+  .qr-status.ok { color:#2da44e; }
+  .qr-status.err { color:#d1242f; }
+  .btn-row { display:flex; gap:8px; justify-content:flex-end; }
+  .btn-row .btn { margin-top:0; }
+  .fld { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .fld label { font-size:12px; color:#656d76; width:130px; flex-shrink:0; }
+  .fld input { flex:1; border:1px solid #e5e7eb; border-radius:7px; padding:6px 10px; font-size:12px; }
+  .foot { font-size:11px; color:#8b949e; text-align:center; margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📡 IM 渠道扫码配置</h1>
+  <div class="sub">微信 / Telegram 支持真扫码自动配置（扫码后 Token 自动写入 <code id="envPath">data/.env</code>）。钉钉 / 飞书 / Discord / 企业微信 / QQ 无官方扫码创建接口，请手动填写凭据。保存后需<b>重启应用</b>生效。</div>
+  <div id="cards">加载中…</div>
+</div>
+
+<div class="modal-mask" id="qrMask">
+  <div class="modal">
+    <h3 id="qrTitle">扫码配置</h3>
+    <div class="hint" id="qrHint"></div>
+    <div class="qr-zone" id="qrZone"></div>
+    <div class="qr-status" id="qrStatus">准备中…</div>
+    <div class="btn-row">
+      <button class="btn" id="qrClose">关闭</button>
+      <button class="btn" id="qrRefresh" style="display:none;">刷新二维码</button>
+    </div>
+  </div>
+</div>
+
+<div class="foot">fnos-dsh · 凭据只保存在 NAS 本地 .env</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let qrTimer = null;
+let qrChannel = null;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts || {});
+  return r.json().catch(() => ({}));
+}
+
+async function load() {
+  const s = await api('/api/channels-scan/status');
+  if (s && s.envFile) $('#envPath').textContent = s.envFile;
+  const c = (s && s.channels) || {};
+  const defs = [
+    { id:'weixin', name:'💬 微信个人号', desc:'腾讯 iLink 扫码登录 · 双向对话', scan:'weixin', st:c.weixin },
+    { id:'telegram', name:'✈️ Telegram', desc:'扫码创建机器人 · 长轮询收发', scan:'telegram', st:c.telegram },
+    { id:'dingtalk', name:'🐜 钉钉', desc:'钉钉机器人 · 长连接 · 双向对话', st:c.dingtalk },
+    { id:'feishu', name:'🪶 飞书', desc:'飞书机器人 · 长连接 · 双向对话', st:c.feishu },
+    { id:'discord', name:'🎮 Discord', desc:'Discord Bot · Gateway · 双向对话', st:c.discord },
+    { id:'wecom', name:'💼 企业微信', desc:'群机器人 webhook 推送', st:c.wecom },
+    { id:'qq', name:'🐧 QQ 机器人', desc:'QQ 官方机器人 · 网关 · 群/私聊', st:c.qq }
+  ];
+  const box = $('#cards');
+  box.innerHTML = '';
+  for (const d of defs) {
+    const cfg = !!(d.st && d.st.configured);
+    const card = document.createElement('div');
+    card.className = 'card';
+    let body = '';
+    if (d.scan) {
+      body = `<button class="btn primary" data-scan="${d.scan}">📷 扫码配置</button>`;
+    } else {
+      body = `<div class="note">该平台无官方扫码创建接口，请手动填写凭据后保存。</div>`;
+    }
+    body += '<div class="fld"><label>Token / Key</label><input id="env-' + d.id + '" placeholder="（已配置，留空保持不变）" autocomplete="off"></div>';
+    body += `<button class="btn" data-save="${d.id}">保存凭据</button>`;
+    card.innerHTML = `<div class="head"><span class="nm">${d.name}</span><span class="st ${cfg ? 'on' : 'off'}">${cfg ? '已配置' : '未配置'}</span></div>
+      <div class="desc">${d.desc}</div>${body}`;
+    const scanBtn = card.querySelector('[data-scan]');
+    if (scanBtn) scanBtn.addEventListener('click', () => openQr(d.scan));
+    card.querySelector('[data-save]').addEventListener('click', async () => {
+      const val = card.querySelector('#env-' + d.id).value.trim();
+      if (!val) { alert('请先填写凭据'); return; }
+      const keyMap = { weixin:'WEIXIN_TOKEN', telegram:'TELEGRAM_BOT_TOKEN', dingtalk:'DINGTALK_APP_KEY', feishu:'FEISHU_APP_ID', discord:'DISCORD_TOKEN', wecom:'WECOM_WEBHOOK_KEY', qq:'QQ_APP_ID' };
+      const r = await api('/api/channels-scan/env', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entries: { [keyMap[d.id]]: val } }) });
+      alert(r.message || r.error || '已保存');
+      load();
+    });
+    box.appendChild(card);
+  }
+}
+
+function drawQr(text) {
+  const zone = $('#qrZone');
+  zone.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.width = 220; canvas.height = 220;
+  zone.appendChild(canvas);
+  try {
+    if (window.QRCode) window.QRCode.toCanvas(canvas, text, { width: 220, margin: 2 });
+    else throw new Error('no qrcode');
+  } catch (e) {
+    zone.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(text) + '">';
+  }
+}
+function setQrStatus(t, cls) {
+  const el = $('#qrStatus');
+  el.textContent = t || '';
+  el.className = 'qr-status' + (cls ? ' ' + cls : '');
+}
+async function openQr(kind) {
+  clearTimeout(qrTimer);
+  qrChannel = kind;
+  $('#qrTitle').textContent = kind === 'weixin' ? '💬 微信扫码登录' : '✈️ Telegram 扫码创建机器人';
+  $('#qrHint').textContent = kind === 'weixin'
+    ? '用微信扫描二维码完成登录（腾讯 iLink 官方接口），Token 自动写入 .env。'
+    : '用 Telegram 扫描二维码创建机器人，Bot Token 自动写入 .env。';
+  $('#qrStatus').textContent = '正在获取二维码…';
+  $('#qrStatus').className = 'qr-status';
+  $('#qrZone').innerHTML = '';
+  $('#qrRefresh').style.display = 'none';
+  $('#qrMask').classList.add('show');
+  if (kind === 'weixin') await startWeixin();
+  else await startTelegram();
+}
+async function startWeixin() {
+  const r = await api('/api/channels-scan/weixin/qr');
+  if (!r.ok) { setQrStatus(r.error || '获取二维码失败', 'err'); return; }
+  drawQr(r.qr_payload);
+  $('#qrRefresh').style.display = '';
+  setQrStatus('请用微信扫描二维码完成登录…');
+  pollWeixin(r.qrcode);
+}
+async function pollWeixin(qrcode) {
+  clearTimeout(qrTimer);
+  const r = await api('/api/channels-scan/weixin/status?qrcode=' + encodeURIComponent(qrcode));
+  if (!r.ok) { setQrStatus(r.error || '查询失败', 'err'); return; }
+  if (r.status === 'scaned') { setQrStatus('已扫码，请在微信中确认…'); qrTimer = setTimeout(() => pollWeixin(qrcode), 3000); }
+  else if (r.status === 'wait') { setQrStatus('等待微信扫码…'); qrTimer = setTimeout(() => pollWeixin(qrcode), 3000); }
+  else if (r.status === 'expired') { setQrStatus('二维码已过期，点击「刷新二维码」', 'err'); }
+  else if (r.status === 'confirmed') { setQrStatus('✅ 扫码成功！Token 已写入 .env，重启应用后生效', 'ok'); $('#qrRefresh').style.display = 'none'; load(); }
+  else qrTimer = setTimeout(() => pollWeixin(qrcode), 3000);
+}
+async function startTelegram() {
+  const r = await api('/api/channels-scan/telegram/qr');
+  if (!r.ok) { setQrStatus(r.error || '获取二维码失败', 'err'); return; }
+  drawQr(r.qr_payload);
+  $('#qrRefresh').style.display = '';
+  setQrStatus('请用 Telegram 扫描二维码创建机器人…');
+  pollTelegram(r.pairing_id);
+}
+async function pollTelegram(pairingId) {
+  clearTimeout(qrTimer);
+  const r = await api('/api/channels-scan/telegram/status?pairing_id=' + encodeURIComponent(pairingId));
+  if (!r.ok) { setQrStatus(r.error || '查询失败', 'err'); return; }
+  if (r.status === 'waiting' || r.status === 'pending') { setQrStatus('等待 Telegram 扫码…'); qrTimer = setTimeout(() => pollTelegram(pairingId), 2500); }
+  else if (r.status === 'ready') { setQrStatus('✅ 机器人 ' + (r.bot_username || '') + ' 创建成功！Token 已写入 .env，重启应用后生效', 'ok'); $('#qrRefresh').style.display = 'none'; load(); }
+  else if (r.status === 'expired') { setQrStatus('配对已过期，点击「刷新二维码」', 'err'); }
+  else qrTimer = setTimeout(() => pollTelegram(pairingId), 2500);
+}
+
+$('#qrClose').addEventListener('click', () => { clearTimeout(qrTimer); $('#qrMask').classList.remove('show'); });
+$('#qrRefresh').addEventListener('click', () => { if (qrChannel === 'weixin') startWeixin(); else startTelegram(); });
+$('#qrMask').addEventListener('click', (e) => { if (e.target === $('#qrMask')) { clearTimeout(qrTimer); $('#qrMask').classList.remove('show'); } });
+
+load();
+</script>
+</body>
+</html>

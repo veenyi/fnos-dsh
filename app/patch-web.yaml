@@ -10,8 +10,32 @@
     host: 0.0.0.0
     port: 3080
 
-# fnos-dsh 定制：钉钉 Stream 渠道插件（单聊 MVP）
-# 凭据通过环境变量注入（cmd/main 启动时从 data/.env 读取并 export），不硬编码。
+# Web UI 功能全家桶（@linxin666/dsh-web-ui-all，跳过 aionui-panel 与桌面注入右侧面板冲突、remote-web-ui 按需去除）
+- insert:
+    - id: web-ui-compat
+      name: '@linxin666/dsh-web-ui-all'
+    - id: web-ui-settings
+      name: '@linxin666/dsh-client-ui-web-ui-settings'
+    - id: web-ui-community-plugins
+      name: '@linxin666/dsh-client-ui-community-plugins'
+    - id: web-ui-task-board
+      name: '@linxin666/dsh-client-ui-task-board'
+    - id: web-ui-git-graph
+      name: '@linxin666/dsh-client-ui-git-graph'
+    - id: web-ui-pet
+      name: '@linxin666/dsh-pet'
+    - id: web-ui-live-stats
+      name: '@linxin666/dsh-live-stats'
+    - id: web-ui-ssh
+      name: '@linxin666/dsh-ssh'
+    - id: web-ui-describe-image
+      name: '@linxin666/dsh-tool-describe-image'
+    - id: web-ui-liangshen
+      name: '@linxin666/dsh-liangshen'
+    - id: web-ui-skin-center
+      name: '@linxin666/dsh-client-ui-skin-center'
+
+# fnos-dsh 定制：IM 渠道插件（扫码/手动配置，凭据经 data/.env 注入）
 - insert:
     - id: channel-dingtalk
       name: '@deepseek-ai/dsh-channel-dingtalk'
@@ -19,3 +43,47 @@
         enabled: !!js (process.env.DINGTALK_APP_KEY ?? '') !== ''
         appKey: !!js process.env.DINGTALK_APP_KEY ?? ''
         appSecret: !!js process.env.DINGTALK_APP_SECRET ?? ''
+    - id: channel-telegram
+      name: '@deepseek-ai/dsh-channel-telegram'
+      config:
+        enabled: !!js (process.env.TELEGRAM_BOT_TOKEN ?? '') !== ''
+        token: !!js process.env.TELEGRAM_BOT_TOKEN ?? ''
+        allowedUsers: !!js process.env.TELEGRAM_ALLOWED_USERS ?? ''
+    - id: channel-weixin
+      name: '@deepseek-ai/dsh-channel-weixin'
+      config:
+        enabled: !!js (process.env.WEIXIN_TOKEN ?? '') !== ''
+        token: !!js process.env.WEIXIN_TOKEN ?? ''
+        accountId: !!js process.env.WEIXIN_ACCOUNT_ID ?? ''
+        baseUrl: !!js process.env.WEIXIN_BASE_URL ?? ''
+    - id: channel-discord
+      name: '@deepseek-ai/dsh-channel-discord'
+      config:
+        enabled: !!js (process.env.DISCORD_TOKEN ?? '') !== ''
+        token: !!js process.env.DISCORD_TOKEN ?? ''
+    - id: channel-feishu
+      name: '@deepseek-ai/dsh-channel-feishu'
+      config:
+        enabled: !!js (process.env.FEISHU_APP_ID ?? '') !== ''
+        appId: !!js process.env.FEISHU_APP_ID ?? ''
+        appSecret: !!js process.env.FEISHU_APP_SECRET ?? ''
+    - id: channel-wecom
+      name: '@deepseek-ai/dsh-channel-wecom'
+      config:
+        enabled: !!js (process.env.WECOM_WEBHOOK_KEY ?? '') !== '' || ((process.env.WECOM_CORP_ID ?? '') !== '' && (process.env.WECOM_AGENT_ID ?? '') !== '' && (process.env.WECOM_SECRET ?? '') !== '')
+        webhookKey: !!js process.env.WECOM_WEBHOOK_KEY ?? ''
+        corpId: !!js process.env.WECOM_CORP_ID ?? ''
+        agentId: !!js process.env.WECOM_AGENT_ID ?? ''
+        secret: !!js process.env.WECOM_SECRET ?? ''
+        callbackToken: !!js process.env.WECOM_CALLBACK_TOKEN ?? ''
+        encodingAESKey: !!js process.env.WECOM_CALLBACK_AES_KEY ?? ''
+    - id: im-qqbot
+      name: '@tencent-connect/dsh-qqbot'
+      config:
+        enabled: !!js (process.env.QQBOT_APPID ?? '') !== ''
+        appId: !!js process.env.QQBOT_APPID ?? ''
+        appSecret: !!js process.env.QQBOT_SECRET ?? ''
+    - id: channels-scan
+      name: '@deepseek-ai/dsh-channels-scan'
+      config:
+        enabled: true

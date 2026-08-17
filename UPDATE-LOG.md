@@ -1,5 +1,13 @@
 # DeepSeek Harness (fnos-dsh) 更新日志
 
+## v0.1.17 (2026-08-14) — GitHub 同步 + 自动打包 ✅
+- 仓库：github.com/veenyi/fnos-dsh（公开，main 分支已同步全部源码）
+- 自动打包：.github/workflows/build.yml，push v* tag 触发
+  - Actions(ubuntu)：npm install → apply-patches.sh（定制补丁+IM插件）→ 隐私兜底扫描 → Linux tar 构建 FPK → 发布 Release
+- FPK Linux 手工构建与 fnpack 同构（gzip tar：app.tgz + cmd/config/ICON/manifest/wizard）
+- 已实测验证：Release v0.1.17 FPK 116MB，定制全部生效（汉化/特权/polyfill/插件启停/IM 插件）
+- 关键经验：GitHub https 间歇被限→SSH 443 通道(ssh.github.com:443 + id_ed25519_github)；.gitignore 的 node_modules/ 会误伤 app/patches/files/node_modules/（须锚定 /app/node_modules/）
+
 ## v0.1.17 (2026-08-14) — 修复插件配置页空白（真正根因）
 - 真正根因：settingsScope 的 persistence 由 `connection.isLoopback ? "host" : "memory"` 决定；
   LAN 访问 isLoopback=false → memory 模式 → store 初始 status="unavailable" 且 enqueue 直接 return（read 不执行），

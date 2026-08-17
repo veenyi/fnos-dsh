@@ -95,12 +95,13 @@ function apply(ctx, config) {
 
 	async function handleMessage(senderId, text, sessionWebhook) {
 		try {
-			const agent = await ensureAgent(senderId);
-			const sid = sessionByUser.get(senderId);
-			if (busy.has(sid)) {
+			let sid = sessionByUser.get(senderId);
+			if (sid && busy.has(sid)) {
 				await replyDingtalk(sessionWebhook, "[系统] 上一条消息还在处理中，请稍后再发。");
 				return;
 			}
+			const agent = await ensureAgent(senderId);
+			sid = sessionByUser.get(senderId);
 			busy.add(sid);
 			try {
 				await agent.whenIdle();
